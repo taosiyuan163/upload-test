@@ -124,9 +124,10 @@ class FastAPIApp:
 
     def add_event(self, app: FastAPI):
         # 启动任务处理协程
-        @app.on_event("startup")
-        async def startup_event():
-            asyncio.create_task(process_tasks())
+        # @app.on_event("startup")
+        # async def startup_event():
+        #     asyncio.create_task(process_tasks())
+        pass
 
     def add_router(self, router):
         self.app.include_router(router, prefix='/api/v1')
