@@ -25,5 +25,9 @@ async def gen_videos(request:Request,
                      task: GenVideosTaskRequest):
     aclient = request.app.state.aclient
     # 将任务添加到队列中
-    result = await social_media_service.create_videos(aclient,task.subject,task.account_name)
+    result = await social_media_service.create_videos(aclient,
+                                                      task.subject,
+                                                      task.account_name,
+                                                      task.title,
+                                                      task.tags)
     return {"message": result}

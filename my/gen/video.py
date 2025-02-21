@@ -48,7 +48,8 @@ def get_or_create_user_video_dir(uid):
     return target_dir
 
 
-async def submit_create_videos_task(aclient: httpx.AsyncClient, subject, uid):
+async def submit_create_videos_task(aclient: httpx.AsyncClient, subject,
+                                    uid,title,tags):
     check_task(uid)
 
     payload = {
@@ -106,13 +107,13 @@ async def submit_create_videos_task(aclient: httpx.AsyncClient, subject, uid):
         raise HTTPException(status_code=response.status_code, detail=msg)
 
     task_id = response_data['data']['task_id']
-    task = GenVideosTask(uid, task_id, start_time)
+    task = GenVideosTask(uid, task_id, start_time,title,tags)
     add_task(uid, task)
 
     return response
 
 
-async def upload_douyin(account_name, video_folder_path):
+async def upload_douyin(account_name, video_folder_path,title,tags):
     account_file = get_douyin_cookie_path(account_name)
     # 获取视频目录
     folder_path = Path(video_folder_path)
@@ -183,7 +184,15 @@ async def gen_videos_url(aclient: httpx.AsyncClient, task: GenVideosTask):
         progress = data['progress']
         print(f'视频生成中，进度{progress}%')
 
+async def write_video_text_des(title,tags,save_dir_path,txt_name):
 
+    txt_filepath = os.path.join(save_dir_path, txt_name)
+
+    formatted_tags = " ".join([f"#{tag}" for tag in tags])
+
+    async with aiofiles.open(txt_filepath, 'w') as f:
+        await f.write("第一行数据\n")
+        await f.write("第二行数据\n")
 async def download_videos(aclient: httpx.AsyncClient,
                           uid: str,
                           urls: List[str]):
@@ -192,16 +201,20 @@ async def download_videos(aclient: httpx.AsyncClient,
     user_videos_dir = get_or_create_user_video_dir(uid)
     save_dir_path = os.path.join(user_videos_dir, current_time)
 
-    # 确保保存目录存在
-    os.makedirs(save_dir_path, exist_ok=True)
+    # 目录存在就报错
+    os.makedirs(save_dir_path, exist_ok=False)
 
     downloaded_files = []
 
     for url in urls:
         # 获取文件名
         filename = url.split('/')[-1]
-        filename_with_time = f'{filename}_{current_time}'
-        filepath = os.path.join(save_dir_path, filename_with_time)
+        filepath = os.path.join(save_dir_path, filename)
+
+        #提取并创建视频描述的文件
+        filename_without_extension = os.path.splitext(filename)[0]
+        txt_name = f'{filename_without_extension}.txt'
+        await write_video_text_des(save_dir_path,txt_name)
 
         async with aclient.stream('GET', url) as response:
             response.raise_for_status()  # 检查请求是否成功
@@ -215,18 +228,22 @@ async def download_videos(aclient: httpx.AsyncClient,
         print(f'{filename_with_time} 下载完毕')
         downloaded_files.append(filepath)
 
+    return downloaded_files
+
 
 async def process_gen_video_tasks(aclient: httpx.AsyncClient):
     while True:
         for uid, task in gen_video_tasks:
             videos_url_list = await gen_videos_url(aclient, task)
 
+            #todo 内容和标签
             if videos_url_list:
-                downloaded_files = await download_videos(aclient, uid, videos_url_list)
+                downloaded_files = await download_videos(aclient, uid,
+                                                         videos_url_list)
 
                 for file in downloaded_files:
-
-                    upload_douyin()
+                    #todo title,tags对应各视频上
+                    await upload_douyin(uid, file,task.title,task.tags)
         #
         # task = await upload_task_queue.get()
         # platform, account_name, action, video_path = task

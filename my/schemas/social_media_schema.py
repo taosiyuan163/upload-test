@@ -17,3 +17,5 @@ class UploadTaskRequest(BaseModel):
 class GenVideosTaskRequest(BaseModel):
     subject: str = Field(..., description="视频主题")
     account_name: str = Field(..., description="平台的账号名")
+    title: str = Field(..., description="视频名")
+    tags: List[str] = Field(..., description="视频标签")

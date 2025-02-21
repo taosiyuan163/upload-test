@@ -59,9 +59,12 @@ class SocialMediaService:
     async def create_videos(self,
                             aclient: httpx.AsyncClient,
                             subject,
-                            account_name):
+                            account_name,
+                            title,
+                            tags):
 
-        return await submit_create_videos_task(aclient, subject, account_name)
+        return await submit_create_videos_task(aclient, subject,
+                                               account_name,title,tags)
 
 
 # 创建服务实例
