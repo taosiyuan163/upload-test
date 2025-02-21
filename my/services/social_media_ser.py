@@ -5,6 +5,7 @@ import httpx
 
 from my.gen.video import submit_create_videos_task, get_or_create_user_video_dir
 from my.schemas.social_media_schema import UploadTaskRequest
+from my.utils.data_util import get_douyin_cookie_path
 from uploader.douyin_uploader.main import douyin_setup, DouYinVideo
 from utils.base_social_media import SOCIAL_MEDIA_DOUYIN
 from utils.files_times import generate_schedule_time_next_day, get_title_and_hashtags
@@ -35,7 +36,7 @@ class SocialMediaService:
         get_or_create_user_video_dir(account_name)
 
         if platform == SOCIAL_MEDIA_DOUYIN:
-            account_file = self.get_account_cookie_path(account_name)
+            account_file = get_douyin_cookie_path(account_name)
             cookie_setup = await douyin_setup(str(account_file), handle=True)
             print(f'登录成功，account_name：{account_name}，cookie_setup：{cookie_setup}')
         else:

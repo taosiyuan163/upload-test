@@ -10,6 +10,7 @@ from fastapi import HTTPException
 
 from my.config import VIDEO_GEN_URL, VIDEO_GEN_SEARCH_TASK_URL
 from my.schemas.task import GenVideosTask
+from my.utils.data_util import get_douyin_cookie_path
 from uploader.douyin_uploader.main import douyin_setup, DouYinVideo
 from utils.files_times import generate_schedule_time_next_day, get_title_and_hashtags
 
@@ -111,9 +112,8 @@ async def submit_create_videos_task(aclient: httpx.AsyncClient, subject, uid):
     return response
 
 
-async def upload_douyin(account_file, video_folder_path):
-    # filepath = Path(BASE_DIR) / "videos"
-    # account_file = Path(BASE_DIR / "cookies" / "douyin_uploader" / "account.json")
+async def upload_douyin(account_name, video_folder_path):
+    account_file = get_douyin_cookie_path(account_name)
     # 获取视频目录
     folder_path = Path(video_folder_path)
     # 获取文件夹中的所有文件
@@ -226,7 +226,7 @@ async def process_gen_video_tasks(aclient: httpx.AsyncClient):
 
                 for file in downloaded_files:
 
-        #         upload_douyin()
+                    upload_douyin()
         #
         # task = await upload_task_queue.get()
         # platform, account_name, action, video_path = task
