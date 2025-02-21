@@ -11,7 +11,7 @@ from loguru import logger
 from typing import Optional, List
 
 from my.api.social_media_api import social_router
-from my.daemon import process_tasks
+from my.daemon import process_gen_video_tasks
 
 
 class FastAPIApp:
@@ -123,10 +123,10 @@ class FastAPIApp:
             )
 
     def add_event(self, app: FastAPI):
-        # 启动任务处理协程
-        # @app.on_event("startup")
-        # async def startup_event():
-        #     asyncio.create_task(process_tasks())
+        # 自动处理生成好的视频
+        @app.on_event("startup")
+        async def startup_event():
+            asyncio.create_task(process_gen_video_tasks())
         pass
 
     def add_router(self, router):
