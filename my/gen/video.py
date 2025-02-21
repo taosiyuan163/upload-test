@@ -1,3 +1,4 @@
+import asyncio
 import os
 import time
 from datetime import datetime
@@ -235,10 +236,10 @@ async def download_videos(aclient: httpx.AsyncClient,
 
 async def process_gen_video_tasks(aclient: httpx.AsyncClient):
     while True:
+        print('搜索任务中...')
         for uid, task in gen_video_tasks:
             videos_url_list = await gen_videos_url(aclient, task)
 
-            #todo 内容和标签
             if videos_url_list:
                 downloaded_files = await download_videos(aclient, uid,
                                                          videos_url_list,
@@ -247,30 +248,5 @@ async def process_gen_video_tasks(aclient: httpx.AsyncClient):
                 for file in downloaded_files:
                     #todo title,tags对应各视频上
                     await upload_douyin(uid, file)
-        #
-        # task = await upload_task_queue.get()
-        # platform, account_name, action, video_path = task
-        #
-        # if action == 'upload':
-        #     options = ['-pt', 0]
-        # else:
-        #     options = ''
-        #
-        # try:
-        #     # 调用cli_main.py脚本
-        #     command = ["python", cli_main_path, platform, account_name, action, video_path] + options
-        #     process = await asyncio.create_subprocess_exec(*command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        #     stdout, stderr = await process.communicate()
-        #
-        #     if process.returncode != 0:
-        #         print(f"Task failed: {stderr.decode()}")
-        #     else:
-        #         print(f"Task succeeded: {stdout.decode()}")
-        #
-        # except Exception as e:
-        #     print(f"Error processing task: {e}")
-        #
-        # finally:
-        #     # 标记任务完成
-        #     upload_task_queue.task_done()
-        #     await asyncio.sleep(3)
+
+        await asyncio.sleep(5)

@@ -11,7 +11,7 @@ from loguru import logger
 from typing import Optional, List
 
 from my.api.social_media_api import social_router
-from my.daemon import process_gen_video_tasks
+from my.gen.video import process_gen_video_tasks
 
 
 class FastAPIApp:
@@ -90,7 +90,7 @@ class FastAPIApp:
 
         # Add exception handlers
         self._add_exception_handlers(app)
-
+        self._add_event(app)
         return app
 
     def _add_exception_handlers(self, app: FastAPI) -> None:
@@ -122,11 +122,11 @@ class FastAPIApp:
                 },
             )
 
-    def add_event(self, app: FastAPI):
+    def _add_event(self, app: FastAPI):
         # 自动处理生成好的视频
         @app.on_event("startup")
         async def startup_event():
-            asyncio.create_task(process_gen_video_tasks())
+            asyncio.create_task(process_gen_video_tasks(app.state.aclient))
         pass
 
     def add_router(self, router):
