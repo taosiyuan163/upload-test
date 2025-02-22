@@ -23,11 +23,16 @@ async def video_upload(upload: UploadTaskRequest):
 @social_router.post("/gen/videos")
 async def gen_videos(request:Request,
                      task: GenVideosTaskRequest):
+    """
+    视频生成后自动发布到平台
+    """
     aclient = request.app.state.aclient
     # 将任务添加到队列中
-    result = await social_media_service.create_videos(aclient,
+    submitted_task = await social_media_service.create_videos(aclient,
                                                       task.subject,
                                                       task.account_name,
                                                       task.title,
                                                       task.tags)
-    return {"message": result}
+
+    return {"message": '任务提交成功',
+            'submitted_task':submitted_task}

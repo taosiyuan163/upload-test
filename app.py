@@ -1,9 +1,10 @@
 import asyncio
 import os
+import traceback
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, APIRouter
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -22,55 +23,63 @@ class FastAPIApp:
         version: str = "1.0.0",
         debug: bool = False,
         cors_allowed_origins: Optional[List[str]] = None,
+        http_timeout: float = 10.0,
+        http_max_connections: int = 100,
+        host: str = "0.0.0.0",
+        port: int = 8000,
+        routers: Optional[List[APIRouter]] = None,
     ):
-        """
-        Initialize the FastAPI application.
-
-        Args:
-            title (str): The title of the application.
-            description (str): The description of the application.
-            version (str): The version of the application.
-            debug (bool): Whether to run the application in debug mode.
-            cors_allowed_origins (Optional[List[str]]): List of allowed origins for CORS.
-        """
         self.title = title
         self.description = description
         self.version = version
         self.debug = debug
         self.cors_allowed_origins = cors_allowed_origins or ["*"]
+        self.http_timeout = http_timeout
+        self.http_max_connections = http_max_connections
+        self.host = host
+        self.port = port
+        self.routers = routers or []
 
         # Initialize the FastAPI app
         self.app = self._create_app()
 
     @asynccontextmanager
     async def lifespan(self, app: FastAPI):
-        """
-        Lifespan context manager for managing the lifecycle of the FastAPI app.
-        """
         try:
+            # 初始化 AsyncClient
             client = httpx.AsyncClient(
-                timeout=httpx.Timeout(10.0),  # 设置超时
-                limits=httpx.Limits(max_connections=100)  # 设置连接池大小
+                timeout=httpx.Timeout(self.http_timeout),
+                limits=httpx.Limits(max_connections=self.http_max_connections)
             )
             app.state.aclient = client
             logger.info("AsyncClient initialized")
-            yield
+
+            # 启动视频任务处理
+            logger.info("Starting up video task processing")
+            task = asyncio.create_task(process_gen_video_tasks(app.state.aclient))
+            app.state.video_task = task  # 保存任务引用
+
+            yield  # 应用程序运行
+
         except Exception as e:
-            logger.error(f"Failed to initialize AsyncClient: {e}")
+            logger.error(f"Failed to initialize AsyncClient or start video task: {e}")
             raise
         finally:
+            # 关闭 AsyncClient
             if hasattr(app.state, "aclient"):
                 await app.state.aclient.aclose()
                 logger.info("AsyncClient closed")
 
-    def _create_app(self) -> FastAPI:
-        """
-        Create and configure the FastAPI application.
+            # 取消视频任务（如果需要）
+            if hasattr(app.state, "video_task"):
+                app.state.video_task.cancel()
+                try:
+                    await app.state.video_task
+                except asyncio.CancelledError:
+                    logger.info("Video task cancelled")
 
-        Returns:
-            FastAPI: The configured FastAPI application instance.
-        """
-        # Initialize FastAPI app with lifespan
+    def _create_app(self) -> FastAPI:
+        # 先初始化 FastAPI 应用
         app = FastAPI(
             title=self.title,
             description=self.description,
@@ -79,7 +88,7 @@ class FastAPIApp:
             lifespan=self.lifespan,
         )
 
-        # Add CORS middleware
+        # 添加 CORS 中间件
         app.add_middleware(
             CORSMiddleware,
             allow_origins=self.cors_allowed_origins,
@@ -88,57 +97,63 @@ class FastAPIApp:
             allow_headers=["*"],
         )
 
-        # Add exception handlers
+        # 添加异常处理器
         self._add_exception_handlers(app)
-        self._add_event(app)
+
+        # 注册所有路由器
+        for router in self.routers:
+            app.include_router(router, prefix='/api/v1')  # 直接使用 app 注册路由
+
+        # 将 app 赋值给 self.app
+        self.app = app
         return app
 
     def _add_exception_handlers(self, app: FastAPI) -> None:
-        """
-        Add custom exception handlers to the FastAPI app.
-
-        Args:
-            app (FastAPI): The FastAPI application instance.
-        """
         @app.exception_handler(RequestValidationError)
         async def validation_exception_handler(request: Request, exc: RequestValidationError):
+            # 读取请求体
+            body = await request.body()
+            try:
+                # 尝试将请求体解析为json格式
+                body_str = body.decode("utf-8")
+            except UnicodeDecodeError:
+                body_str = str(body)
+
+            logger.error(f"请求数据：{body_str}，错误: {exc}\n{traceback.format_exc()}")
             return JSONResponse(
                 status_code=400,
                 content={
                     "status": 400,
-                    "message": f"请求数据无效:{request}",
+                    "message": "请求数据无效",
                     "errors": exc.errors(),
                 },
             )
 
         @app.exception_handler(Exception)
         async def generic_exception_handler(request: Request, exc: Exception):
-            logger.error(f"Unhandled exception: {exc}")
+            # 读取请求体
+            body = await request.body()
+            try:
+                # 尝试将请求体解析为json格式
+                body_str = body.decode("utf-8")
+            except UnicodeDecodeError:
+                body_str = str(body)
+
+            # 记录完整的错误堆栈信息
+            logger.error(f"请求数据：{body_str}，内部错误: {exc}\n{traceback.format_exc()}")
             return JSONResponse(
                 status_code=500,
                 content={
                     "status": 500,
-                    "message": f"内部错误，请求：{request}",
+                    "message": "内部错误",
+                    "detail": str(exc),  # 返回错误的详细信息
                 },
             )
-
-    def _add_event(self, app: FastAPI):
-        # 自动处理生成好的视频
-        @app.on_event("startup")
-        async def startup_event():
-            asyncio.create_task(process_gen_video_tasks(app.state.aclient))
-        pass
 
     def add_router(self, router):
         self.app.include_router(router, prefix='/api/v1')
 
     def get_app(self) -> FastAPI:
-        """
-        Get the FastAPI application instance.
-
-        Returns:
-            FastAPI: The FastAPI application instance.
-        """
         return self.app
 
 
@@ -146,28 +161,20 @@ class FastAPIApp:
 if __name__ == "__main__":
     from fastapi import APIRouter
 
-
     # Initialize the FastAPI app
     app_instance = FastAPIApp(
         title="自动化测试工程",
         description="上传内容",
         version="1.0.0",
-        debug=True
-        # cors_allowed_origins=["http://localhost:3000"],  # Allow specific origins
+        debug=True,
+        host="0.0.0.0",
+        port=8000,
+        routers=[social_router],
     )
-
-    # 定义路由器列表
-    routers = [
-        social_router
-    ]
-
-    # 注册所有路由器
-    for router in routers:
-        app_instance.add_router(router)
 
     # Get the FastAPI app
     app = app_instance.get_app()
 
     # Run the app (for development)
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host=app_instance.host, port=app_instance.port)
